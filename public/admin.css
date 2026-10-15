@@ -1,0 +1,5 @@
+main{max-width:1500px}.table-wrap{overflow-x:auto;background:white;border:1px solid #dce5df;border-radius:12px;margin:20px 0}table{border-collapse:collapse;width:100%;font-size:14px}th,td{text-align:left;padding:14px;border-bottom:1px solid #e6ece8;white-space:nowrap}th{background:#edf4ef}h2{margin-top:32px}
+
+#feedback-list details{padding:18px;margin:16px 0;background:white;border:1px solid #dce5df;border-radius:12px}#feedback-list summary{cursor:pointer;font-weight:600}.feedback-pair{display:grid;grid-template-columns:1fr 1fr;gap:24px}#feedback-list p{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.65}@media(max-width:700px){.feedback-pair{grid-template-columns:1fr}}
+
+#diagnostics-dialog{width:min(1000px,94vw);max-width:1000px}#diagnostics-text{white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;line-height:1.5}

@@ -1,0 +1,48 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1791651946581,
+      "tag": "0000_jittery_luckman",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1791738167856,
+      "tag": "0001_wet_deathbird",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1791924203619,
+      "tag": "0002_curly_wendigo",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1791925657887,
+      "tag": "0003_mighty_malice",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1791996321056,
+      "tag": "0004_past_hex",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1791997744150,
+      "tag": "0005_loving_hellcat",
+      "breakpoints": true
+    }
+  ]
+}
