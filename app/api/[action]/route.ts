@@ -1,3 +1,4 @@
+import {measureUsage} from '../../../lib/usage';
 import {audioRecord} from '../../../lib/audio-storage';
 import { getChatGPTUser } from '../../chatgpt-auth';
 import { beginTest, finishTest } from '../../../lib/test-events';
@@ -19,8 +20,10 @@ export async function POST(request:Request) {
   const started = Date.now();
   const action=new URL(request.url).pathname.split('/').pop();
   const metric = (outcome:string) => console.info(JSON.stringify({event:'processing_stage',stage:action==='transcribe'?'transcribe':action==='note'?'note':'unknown',outcome,elapsedMs:Date.now()-started}));
+  let usage:ReturnType<typeof measureUsage>=null;
+  const onUsage=(raw:unknown,model:string)=>{usage=measureUsage(raw,model);};
   let eventId:string|null=null; let eventDB:D1Database|undefined;
-  const complete=async(status:string,code:number|null=null,details:Record<string,unknown>|null=null)=>{if(eventDB&&eventId) {try {await finishTest(eventDB,eventId,status,Date.now()-started,code,details);} catch {console.error('test_metric_finish_failed');}}};
+  const complete=async(status:string,code:number|null=null,details:Record<string,unknown>|null=null)=>{if(eventDB&&eventId) {try {await finishTest(eventDB,eventId,status,Date.now()-started,code,{...details,usage});} catch {console.error('test_metric_finish_failed');}}};
   try {
     const user=await getChatGPTUser();
     if(!user) throw new AppError('Zaloguj się przez ChatGPT, aby korzystać z aplikacji.',401);
@@ -53,7 +56,7 @@ export async function POST(request:Request) {
       if(audio.length<2000) throw new AppError('Nagranie jest puste lub zbyt krótkie.',422);
       await consume(settings.DB,user.userId,'audio');
 
-      const transcript = await transcribe(settings,provider,audio,mime);
+      const transcript = await transcribe(settings,provider,audio,mime,onUsage);
       await complete('success',200);
       metric('success');
       return json({transcript,provider});
@@ -67,7 +70,7 @@ export async function POST(request:Request) {
       if(text.length>200000) throw new AppError('Transkrypcja przekracza 200 000 znaków.',413);
       await consume(settings.DB,user.userId,'note');
 
-      const note = await redact(settings,text);
+      const note = await redact(settings,text,onUsage);
       await complete('success',200);
       metric('success');
       return json({note});

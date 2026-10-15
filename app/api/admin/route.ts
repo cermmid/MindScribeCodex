@@ -1,3 +1,4 @@
+import {COST_COLUMNS} from '../../../lib/usage';
 import {env} from 'cloudflare:workers';
 import {getChatGPTUser} from '../../chatgpt-auth';
 import {isAdmin} from '../../../lib/admin';
@@ -27,6 +28,11 @@ export async function GET(request:Request) {
  AVG(elapsed_ms) AS avg_ms,MAX(started_at) AS last_at
  FROM test_events GROUP BY user_id ORDER BY last_at DESC LIMIT 200`).all();
  const events=await settings.DB.prepare('SELECT id,email,stage,provider,status,started_at,elapsed_ms,duration_ms,error_code,diagnostics FROM test_events ORDER BY started_at DESC LIMIT 200').all();
- return json({users:users.results,events:events.results});
+ const monthStart=Date.UTC(new Date().getUTCFullYear(),new Date().getUTCMonth(),1);
+ const costs=(await settings.DB.prepare('SELECT '+COST_COLUMNS+' FROM test_events').first());
+ const monthCosts=(await settings.DB.prepare('SELECT '+COST_COLUMNS+' FROM test_events WHERE started_at>=?').bind(monthStart).first());
+ const stageCosts=(await settings.DB.prepare('SELECT stage,'+COST_COLUMNS+' FROM test_events GROUP BY stage').all()).results;
+ const userCosts=(await settings.DB.prepare('SELECT user_id,'+COST_COLUMNS+' FROM test_events GROUP BY user_id').all()).results;
+ return json({users:users.results,events:events.results,costs,monthCosts,stageCosts,userCosts,monthStart});
  } catch {return json({error:'Nie udało się odczytać statystyk. Spróbuj ponownie.'},503);}
 }

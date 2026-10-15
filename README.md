@@ -48,3 +48,7 @@ Sekrety, dane użytkowników, audio i zawartość baz nie są częścią repozyt
 ## Synchronizacja
 
 Każda kolejna zmiana kodu ma być zapisywana również w `cermmid/MindScribeCodex`, na gałęzi `claude/laughing-franklin-AddB0`. Zobacz `AGENTS.md`. Synchronizacja jest wykonywana przy zmianach przez agenta; nie jest to automatyczny mechanizm hostingu GitHub → Sites.
+
+## Licznik zużycia i kosztów
+
+Panel administratora zapisuje raportowane przez Gemini tokeny wejścia, cache, odpowiedzi i rozumowania w diagnostyce próby. Koszt jest szacunkiem według zapisanej wersji cennika Standard, nie rachunkiem Google. Aktualnie wyceniany jest Gemini 3.8 Flash w okresie 15.10–31.12.2026. Nieznany model, niepełny raport, nieznana warstwa cenowa lub stawka poza okresem ważności oznaczają brak wyceny. Timeouty bez raportu oraz stare próby nie są liczone jako darmowe. Sumy obejmują wyłącznie próby z wyceną; osobno pokazujemy liczbę braków. Testy połączenia nie są wliczane. Cloud Billing nie jest podłączony.

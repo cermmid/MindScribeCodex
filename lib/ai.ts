@@ -82,7 +82,7 @@ export function geminiText(response: GeminiResponse) {
   return text;
 }
 
-async function gemini(key: string|undefined, model: string, system: string, parts: unknown[], transcription = false) {
+async function gemini(key: string|undefined, model: string, system: string, parts: unknown[], transcription = false, onUsage?:(raw:unknown,model:string)=>void) {
   if (!key) throw new AppError('Właściciel aplikacji nie podłączył jeszcze klucza Gemini. Możesz obejrzeć przykład i nagrać próbę.',503);
   if (!/^[a-zA-Z0-9._-]+$/.test(model)) throw new AppError('Nieprawidłowa konfiguracja modelu.',503);
   const result = await call(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
@@ -94,6 +94,7 @@ async function gemini(key: string|undefined, model: string, system: string, part
       ...(transcription && /^gemini-2\.5-flash(?:$|-)/.test(model) ? {thinkingConfig:{thinkingBudget:0}} : {}),
     }}),
   });
+  onUsage?.((result as any)?.usageMetadata,model);
   return geminiText(result as GeminiResponse);
 }
 
@@ -118,7 +119,7 @@ export function scribeTranscript(data: {text?:string, words?:ScribeWord[]}) {
   return '[Etykiety oznaczają różne głosy, nie potwierdzają roli lekarza lub pacjenta.]\n'+lines.join('\n');
 }
 
-export async function transcribe(settings:Settings, provider:string, audio:Uint8Array, mime:string) {
+export async function transcribe(settings:Settings, provider:string, audio:Uint8Array, mime:string, onUsage?:(raw:unknown,model:string)=>void) {
   if(provider==='elevenlabs') {
     if(!settings.ELEVENLABS_API_KEY) throw new AppError('ElevenLabs nie jest jeszcze podłączone. Wybierz skonfigurowane Gemini lub poczekaj na ustawienie klucza przez właściciela.',503);
     const form = new FormData();
@@ -131,11 +132,11 @@ export async function transcribe(settings:Settings, provider:string, audio:Uint8
   }
   if(provider!=='gemini') throw new AppError('Wybierz ElevenLabs albo Gemini.');
   // Buffer is supported by the starter's nodejs_compat runtime.
-  const text = await gemini(settings.GEMINI_API_KEY,settings.TRANSCRIPTION_MODEL||'gemini-3.8-flash',TRANSCRIPTION_PROMPT,[{inlineData:{mimeType:mime,data:Buffer.from(audio.buffer,audio.byteOffset,audio.byteLength).toString('base64')}},{text:'Przepisz całe nagranie.'}],true);
+  const text = await gemini(settings.GEMINI_API_KEY,settings.TRANSCRIPTION_MODEL||'gemini-3.8-flash',TRANSCRIPTION_PROMPT,[{inlineData:{mimeType:mime,data:Buffer.from(audio.buffer,audio.byteOffset,audio.byteLength).toString('base64')}},{text:'Przepisz całe nagranie.'}],true,onUsage);
   if(text==='[BRAK CZYTELNEJ MOWY]') throw new AppError('Nie rozpoznano czytelnej mowy. Odsłuchaj nagranie i sprawdź mikrofon.',422);
   return text;
 }
 
-export async function redact(settings:Settings, transcript:string) {
-  return (await gemini(settings.GEMINI_API_KEY,settings.NOTE_MODEL||'gemini-3.1-pro-preview',NOTE_PROMPT,[{text:JSON.stringify({transkrypcja_konsultacji:transcript})}])).replace(/\s+/gu,' ').trim();
+export async function redact(settings:Settings, transcript:string, onUsage?:(raw:unknown,model:string)=>void) {
+  return (await gemini(settings.GEMINI_API_KEY,settings.NOTE_MODEL||'gemini-3.1-pro-preview',NOTE_PROMPT,[{text:JSON.stringify({transkrypcja_konsultacji:transcript})}],false,onUsage)).replace(/\s+/gu,' ').trim();
 }
