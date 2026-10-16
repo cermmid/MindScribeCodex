@@ -52,3 +52,12 @@ Każda kolejna zmiana kodu ma być zapisywana również w `cermmid/MindScribeCod
 ## Licznik zużycia i kosztów
 
 Panel administratora zapisuje raportowane przez Gemini tokeny wejścia, cache, odpowiedzi i rozumowania w diagnostyce próby. Koszt jest szacunkiem według zapisanej wersji cennika Standard, nie rachunkiem Google. Aktualnie wyceniany jest Gemini 3.8 Flash w okresie 15.10–31.12.2026. Nieznany model, niepełny raport, nieznana warstwa cenowa lub stawka poza okresem ważności oznaczają brak wyceny. Timeouty bez raportu oraz stare próby nie są liczone jako darmowe. Sumy obejmują wyłącznie próby z wyceną; osobno pokazujemy liczbę braków. Testy połączenia nie są wliczane. Cloud Billing nie jest podłączony.
+
+
+### Diagnostyka v16 (schemat 2)
+
+Panel administracyjny → Szczegóły → Kopiuj diagnostykę eksportuje metadane wybranej próby i wszystkich dostępnych ponowień (do 500). Nowe próby zapisują wersję aplikacji, fazy i czasy obsługi, ID zapisanego audio, rzeczywisty HTTP dostawcy (także 200 przy odrzuceniu wyniku), bezpieczne identyfikatory odpowiedzi/żądań, parametry generowania, hash promptu, limit czasu, wielkość żądania/odpowiedzi, finishReason, promptFeedback, safetyRatings i liczby fragmentów/znaków. Błędy limitu tokenów, blokady, pustej odpowiedzi, struktury, JSON, odczytu i połączenia mają osobne kody. Częściowe wyniki nadal są odrzucane.
+
+Przed AI zapisywany jest punkt kontrolny statusu pending; w razie przerwania pracy serwera pozostaje ślad rozpoczętej próby, bez zmyślonego czasu zakończenia. Brak końcowego raportu oznacza przerwanie lub nadal trwającą pracę, nie dowodzi konkretnej przyczyny. HTTP dotyczy odpowiedzi widocznej dla aplikacji, nie ukrytych warstw sieci. Nie przechowujemy swobodnych wiadomości dostawcy (finishMessage/error.message), treści rozmowy, części rozumowania, cytowań, nagłówków autoryzacji ani pełnego stosu wyjątku. Ich obecność może być oznaczona flagą. Nierozpoznane wartości enum są oznaczane UNRECOGNIZED_VALUE. Starszych raportów nie da się uzupełnić wstecz; ponowienie zapisanej wizyty generuje nowy raport. Schematy i pola Gemini: https://ai.google.dev/api/generate-content .
+
+Walidacja: testy symulują odpowiedzi dostawcy, transport i ścieżkę zapisu/eksportu; nie wysyłają nagrań pacjentów do API. Aktualizacja nie zmienia modeli, promptów, limitów wyjścia ani ustawień bezpieczeństwa.

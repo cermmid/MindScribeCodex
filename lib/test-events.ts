@@ -7,6 +7,6 @@ export async function beginTest(db:D1Database,user:{userId:string;email:string;d
  await db.prepare('INSERT INTO test_events (id,user_id,email,display_name,stage,provider,status,started_at,duration_ms,visit_id,run_id,model,audio_bytes,audio_format) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)').bind(id,user.userId,user.email,user.displayName,stage,provider,'pending',Date.now(),durationMs,uuid(context.visitId),uuid(context.runId),context.model??null,context.audioBytes??null,context.audioFormat??null).run();
  return id;
 }
-export async function finishTest(db:D1Database,id:string,status:string,elapsedMs:number,errorCode:number|null=null,diagnostics:Record<string,unknown>|null=null) {
+export async function finishTest(db:D1Database,id:string,status:string,elapsedMs:number|null,errorCode:number|null=null,diagnostics:Record<string,unknown>|null=null) {
  await db.prepare('UPDATE test_events SET status=?,elapsed_ms=?,error_code=?,diagnostics=? WHERE id=?').bind(status,elapsedMs,errorCode,diagnostics?JSON.stringify(diagnostics):null,id).run();
 }
