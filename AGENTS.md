@@ -1,5 +1,15 @@
 # MindScribe project instructions
 
+## Bug Investigator
+
+When the user asks to investigate a bug using Bug Investigator or `$bug-investigator`, read
+`docs/agents/bug-investigator.md` and `agent-skills/bug-investigator/SKILL.md`.
+This is a diagnosis-only role: no source changes, commits, deployments, production
+access, provider calls or delegation. In the ordinary shared cloud conversation,
+perform static analysis only; instructions do not change tool permissions.
+Use the documented launcher for a separate constrained session. If its sandbox
+check fails, do not bypass it or run application tests directly.
+
 ## Required GitHub synchronization
 
 The owner requested on 2026-10-15 that every subsequent project change also be saved to their GitHub repository. This is a standing instruction, not an optional backup.
