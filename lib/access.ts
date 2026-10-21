@@ -6,17 +6,21 @@ async function key(secret:string) { return crypto.subtle.importKey('raw',text.en
 function hex(bytes:ArrayBuffer) { return Array.from(new Uint8Array(bytes),n=>n.toString(16).padStart(2,'0')).join(''); }
 export async function session(request:Request,secret:string,create=false) {
   const value = request.headers.get('cookie')?.split(';').map(x=>x.trim()).find(x=>x.startsWith(COOKIE+'='))?.slice(COOKIE.length+1);
+  let previousState='missing';
   if(value) {
+    previousState='malformed';
     const [id,expiry,signature,...extra] = value.split('.');
-    if(!extra.length && /^[a-f0-9-]{36}$/.test(id||'') && /^\d+$/.test(expiry||'') && /^[a-f0-9]{64}$/.test(signature||'') && Number(expiry)>Date.now()) {
+    if(!extra.length && /^[a-f0-9-]{36}$/.test(id||'') && /^\d+$/.test(expiry||'') && /^[a-f0-9]{64}$/.test(signature||'') && Number.isSafeInteger(Number(expiry))) {
       const bytes=Uint8Array.from(signature.match(/../g)!,b=>parseInt(b,16));
-      if(await crypto.subtle.verify('HMAC',await key(secret),bytes,text.encode(id+'.'+expiry))) return {id,cookie:null};
+      const verified=await crypto.subtle.verify('HMAC',await key(secret),bytes,text.encode(id+'.'+expiry));
+      previousState=verified?'expired':'invalid_signature';
+      if(verified && Number(expiry)>Date.now()) return {id,cookie:null,diagnostics:{previousState:'valid',renewed:false}};
     }
   }
-  if(!create) throw new AppError('Sesja wygasła. Pobierz nagranie lub skopiuj tekst przed odświeżeniem strony.',403);
+  if(!create) throw new AppError('Sesja wygasła. Pobierz nagranie lub skopiuj tekst przed odświeżeniem strony.',403,{source:'application_session',technicalMessage:'APP_SESSION_REQUIRED',session:{previousState,renewed:false}});
   const id=crypto.randomUUID(), expiry=String(Date.now()+24*60*60*1000);
   const sig=hex(await crypto.subtle.sign('HMAC',await key(secret),text.encode(id+'.'+expiry)));
-  return {id,cookie:`${COOKIE}=${id}.${expiry}.${sig}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=86400`};
+  return {id,diagnostics:{previousState,renewed:true},cookie:`${COOKIE}=${id}.${expiry}.${sig}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=86400`};
 }
 export function sameOrigin(request:Request) {
   if(request.headers.get('origin')!==new URL(request.url).origin || request.headers.get('x-mindscribe-request')!=='1') throw new AppError('Niedozwolone źródło żądania.',403);

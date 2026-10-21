@@ -43,7 +43,7 @@ async function call(url: string, init: RequestInit, timeoutMs = 240000, context:
   const diagnosticId = crypto.randomUUID().slice(0,8);
   const provider = new URL(url).hostname === 'api.elevenlabs.io' ? 'ElevenLabs' : 'Gemini';
   const diagnostic = (outcome:string, upstreamStatus?:number) => console.error(JSON.stringify({event:'ai_request_failed',diagnosticId,provider,outcome,upstreamStatus,elapsedMs:Date.now()-started}));
-  Object.assign(context,{diagnosticSchema:2,appVersion:'16-diagnostics-1',diagnosticId,provider,upstreamStatus:null,aiPhase:'request',request:{...context.request,endpoint:new URL(url).origin+new URL(url).pathname,method:init.method||'GET',timeoutMs,requestBodyBytes:typeof init.body==='string'?Buffer.byteLength(init.body,'utf8'):null},requestStartedAt:new Date(started).toISOString()});
+  Object.assign(context,{diagnosticSchema:2,appVersion:'17-session-renewal-1',diagnosticId,provider,upstreamStatus:null,aiPhase:'request',request:{...context.request,endpoint:new URL(url).origin+new URL(url).pathname,method:init.method||'GET',timeoutMs,requestBodyBytes:typeof init.body==='string'?Buffer.byteLength(init.body,'utf8'):null},requestStartedAt:new Date(started).toISOString()});
   let response: Response;
   try { response = await fetch(url, {...init, signal: AbortSignal.timeout(timeoutMs)}); }
   catch (error) {

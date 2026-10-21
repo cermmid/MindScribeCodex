@@ -20,7 +20,7 @@ export async function POST(request:Request) {
   const started = Date.now();
   const action=new URL(request.url).pathname.split('/').pop();
   const metric = (outcome:string) => console.info(JSON.stringify({event:'processing_stage',stage:action==='transcribe'?'transcribe':action==='note'?'note':'unknown',outcome,elapsedMs:Date.now()-started}));
-  const diagnosticContext:Record<string,any>={diagnosticSchema:2,appVersion:'16-diagnostics-1',upstreamStatus:null,aiPhase:'not_started',automaticRetries:0};
+  const diagnosticContext:Record<string,any>={diagnosticSchema:2,appVersion:'17-session-renewal-1',upstreamStatus:null,aiPhase:'not_started',automaticRetries:0};
   const incomingRay=request.headers.get('cf-ray');
   diagnosticContext.incomingCfRay=incomingRay&&/^[a-zA-Z0-9-]{1,80}$/.test(incomingRay)?incomingRay:null;
   const phases:{phase:string,startedMs:number,durationMs:number}[]=[];
@@ -28,6 +28,8 @@ export async function POST(request:Request) {
   const mark=(next:string)=>{const now=Date.now();phases.push({phase,startedMs:phaseStarted-started,durationMs:now-phaseStarted});phase=next;phaseStarted=now;};
   let usage:ReturnType<typeof measureUsage>=null;
   const onUsage=(raw:unknown,model:string)=>{usage=measureUsage(raw,model);};
+  let renewedCookie:string|null=null;
+  const respond=(data:unknown,status=200)=>json(data,status,renewedCookie?{'Set-Cookie':renewedCookie}:{});
   let eventId:string|null=null; let eventDB:D1Database|undefined;
   const complete=async(status:string,code:number|null=null,details:Record<string,unknown>|null=null)=>{if(eventDB&&eventId) {try {await finishTest(eventDB,eventId,status,status==='pending'?null:Date.now()-started,code,{...diagnosticContext,...details,usage,pipelinePhase:phase,pipelineTimings:[...phases,{phase,startedMs:phaseStarted-started,durationMs:Date.now()-phaseStarted}]});} catch {console.error('test_metric_finish_failed');}}};
   try {
@@ -41,10 +43,14 @@ export async function POST(request:Request) {
       eventDB=settings.DB;eventId=await beginTest(eventDB,user,action,provider,null,{visitId:request.headers.get('x-visit-id'),runId:request.headers.get('x-processing-run-id'),model:provider==='elevenlabs'?'scribe_v2':action==='transcribe'?(settings.TRANSCRIPTION_MODEL||'gemini-3.8-flash'):(settings.NOTE_MODEL||'gemini-3.8-flash')});
     }
     mark('session_validation');
-    await session(request,settings.SESSION_SECRET);
+    // Auxiliary cookie is renewable only AFTER trusted platform identity and
+    // same-origin checks. Ownership and quotas below remain keyed by userId.
+    const appSession=await session(request,settings.SESSION_SECRET,true);
+    renewedCookie=appSession.cookie;
+    diagnosticContext.session=appSession.diagnostics;
     if(action==='check') {
       await consume(settings.DB,user.userId,'check');
-      return json(await checkGemini(settings));
+      return respond(await checkGemini(settings));
     }
     if(action==='transcribe') {
       mark('configuration');
@@ -76,7 +82,7 @@ export async function POST(request:Request) {
       mark('result_ready');
       await complete('success',200);
       metric('success');
-      return json({transcript,provider});
+      return respond({transcript,provider});
     }
     if(action==='note') {
       mark('note_input');
@@ -97,7 +103,7 @@ export async function POST(request:Request) {
       mark('result_ready');
       await complete('success',200);
       metric('success');
-      return json({note});
+      return respond({note});
     }
     throw new AppError('Nie znaleziono operacji.',404);
   } catch(error) {
@@ -107,6 +113,6 @@ export async function POST(request:Request) {
     const details={diagnosticId,source:'application',exceptionType:error instanceof AppError?'AppError':error instanceof Error&&['TypeError','RangeError','SyntaxError','AbortError','TimeoutError','Error'].includes(error.name)?error.name:'InternalError',technicalMessage:'Application processing failed',...(error instanceof AppError?error.diagnostics:{}),userMessage:message,applicationStatus:error instanceof AppError?error.status:500};
     await complete('failure',error instanceof AppError?error.status:500,details);
     metric('failure');
-    return json({error:message,diagnosticId:details.diagnosticId},error instanceof AppError?error.status:500);
+    return respond({error:message,diagnosticId:details.diagnosticId},error instanceof AppError?error.status:500);
   }
 }
