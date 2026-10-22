@@ -48,7 +48,7 @@ function setBusy(value, stage='') {
       const seconds = Math.floor((Date.now()-start)/1000);
       const time = `${Math.floor(seconds/60)}:${String(seconds%60).padStart(2,'0')}`;
       const provider = stage.startsWith('1') ? (selectedProvider === 'gemini' ? 'Gemini' : 'ElevenLabs') : 'Gemini';
-      $('progress-detail').textContent = `${provider} · ${time} oczekiwania. ` + (seconds >= 60 ? 'To trwa dłużej niż oczekiwano. Nagranie pozostaje w tej karcie i można je pobrać. Nie odświeżaj strony.' : 'Czekam na odpowiedź usługi. Zachowaj tę kartę otwartą.');
+      $('progress-detail').textContent = `${provider} · ${time} oczekiwania. ` + (seconds >= 60 ? 'Zadanie i nagranie są zapisane. Po powrocie otwórz wizytę z historii.' : 'Czekam na odpowiedź usługi. Zachowaj tę kartę otwartą.');
     };
     update(); progressInterval = setInterval(update,1000);
   }
@@ -57,6 +57,13 @@ function setBusy(value, stage='') {
   if (!value && historyDirty) scheduleHistorySave();
 }
 async function api(path, options={}) {
+  if(window.MindScribeTransport){
+    if(config?.backgroundJobs && (path==='/api/note'||(path==='/api/transcribe'&&selectedProvider==='gemini'))){
+      if(!visitId||visitRevision===0){historyDirty=true;if(!await saveHistory())throw new Error('Najpierw zapisz wizytę.');}
+      return window.MindScribeTransport.run({visitId,stage:path==='/api/note'?'note':'transcribe',audioId:savedAudioId,...(path==='/api/note'?{transcript:JSON.parse(options.body).transcript}:{})},job=>{$('progress-detail').textContent='Zadanie '+job.id.slice(0,8)+' · '+({queued:'oczekuje na wysłanie',preparing:'przygotowywanie',submitting:'wysyłanie',running:'Gemini przetwarza',polling:'sprawdzanie wyniku',succeeded:'gotowe',failed:'błąd',uncertain:'brak potwierdzenia'}[job.state]||job.state)+'. Wynik będzie dostępny po powrocie do wizyty.';});
+    }
+    return window.MindScribeTransport.request(path,options,{visitId,timeoutMs:path==='/api/transcribe'?270000:30000});
+  }
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), (path.startsWith('/api/visits')||path.startsWith('/api/feedback')) ? 20000 : 270000);
   try {
@@ -331,6 +338,7 @@ async function saveHistory() {
   try {
     const result=await api('/api/visits',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(snapshot)});
     visitRevision=result.visit.revision; historyDirty=false;
+    if($('note').value.trim())window.MindScribeTransport?.acknowledged(visitId);
     $('save-status').textContent='Zapisano w historii · '+new Date(result.visit.updated_at).toLocaleTimeString('pl-PL',{hour:'2-digit',minute:'2-digit'});
     return true;
   } catch(error) {
@@ -383,6 +391,13 @@ async function openVisit(id) {
     $('transcript-details').open=Boolean(visit.transcript)&&!visit.note;
     $('save-status').textContent='Wizyta z historii. Zmiany zapisują się automatycznie.';
     await loadVisitAudio(visit.id);
+    if(config?.backgroundJobs){
+      const data=await api('/api/jobs?visitId='+encodeURIComponent(visit.id));
+      $('saved-audio-list').append(...data.jobs.filter(j=>j.state!=='failed').slice(0,4).map(job=>{
+        const button=document.createElement('button');button.type='button';button.className='secondary';button.textContent=(job.state==='succeeded'?'Odbierz zapisany wynik':'Sprawdź zadanie')+' · '+(job.stage==='transcribe'?'transkrypcja':'notatka')+' · '+job.id.slice(0,8);
+        button.onclick=async()=>{if(busy||recording)return;if(job.state==='uncertain'){if(!confirm('Nie wiadomo, czy poprzednie zadanie zostało przyjęte przez Gemini. Ponowienie może naliczyć drugi koszt. Zezwolić na nową próbę?'))return;await api('/api/jobs?id='+job.id+'&action=retry-uncertain',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({confirm:true})});window.MindScribeTransport.acknowledged(visitId);showError('Możesz ponowić przygotowanie notatki.');return;}setBusy(true,'Sprawdzam zapisane zadanie');try{const result=await window.MindScribeTransport.wait(job);if(result.transcript){$('transcript').value=result.transcript;$('transcript-details').open=true;}if(result.note){originalNote=result.note;renderNote(result.note);}historyChanged();}catch(e){showError(e.message);}finally{setBusy(false);}};return button;
+      }));
+    }
     $('record-state').textContent=savedAudioId?'Wczytano wizytę z nagraniem':'Wczytano tekst wizyty';
     $('history-dialog').close();
     return true;

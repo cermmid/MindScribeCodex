@@ -12,5 +12,5 @@ export async function GET(request:Request) {
   if(!user) return json({error:'Zaloguj się przez ChatGPT, aby korzystać z aplikacji.'},401);
   const s=await session(request,settings.SESSION_SECRET,true);
   const gemini=Boolean(settings.GEMINI_API_KEY), elevenlabs=Boolean(settings.ELEVENLABS_API_KEY);
-  return json({isAdmin:isAdmin(user,settings),user:user?{displayName:user.displayName}:null,signInPath:chatGPTSignInPath('/'),signOutPath:chatGPTSignOutPath('/'),configured:gemini,providers:{gemini,elevenlabs},defaultProvider:settings.DEFAULT_TRANSCRIPTION_PROVIDER || (elevenlabs?'elevenlabs':'gemini'),transcriptionModel:settings.TRANSCRIPTION_MODEL||'gemini-3.8-flash',noteModel:settings.NOTE_MODEL||'gemini-3.1-pro-preview',maxAudioBytes:24*1024*1024},200,s.cookie?{'Set-Cookie':s.cookie}:{});
+  return json({backgroundJobs:true,isAdmin:isAdmin(user,settings),user:user?{displayName:user.displayName}:null,signInPath:chatGPTSignInPath('/'),signOutPath:chatGPTSignOutPath('/'),configured:gemini,providers:{gemini,elevenlabs},defaultProvider:settings.DEFAULT_TRANSCRIPTION_PROVIDER || (elevenlabs?'elevenlabs':'gemini'),transcriptionModel:settings.TRANSCRIPTION_MODEL||'gemini-3.8-flash',noteModel:settings.NOTE_MODEL||'gemini-3.1-pro-preview',maxAudioBytes:24*1024*1024},200,s.cookie?{'Set-Cookie':s.cookie}:{});
 }

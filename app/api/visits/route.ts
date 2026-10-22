@@ -1,3 +1,4 @@
+import {cleanupJobData,type JobEnv} from '../../../lib/jobs';
 import {cleanupAudio} from '../../../lib/audio-storage';
 import {env} from 'cloudflare:workers';
 import {getChatGPTUser} from '../../chatgpt-auth';
@@ -30,6 +31,7 @@ async function handle(request:Request) {
     if(request.method==='POST') return json({visit:await saveVisit(db,user.userId,data)});
     if(!bucket)throw new AppError('Magazyn audio jest niedostępny. Spróbuj usunąć wizytę później.',503);
     await deleteVisit(db,user.userId,data.id,data.revision);
+    await cleanupJobData(env as unknown as JobEnv,user.userId);
     try{const pending=await cleanupAudio(db,bucket,user.userId);if(pending)return json({deleted:true,cleanupPending:true});}catch{console.error('audio_cleanup_pending');return json({deleted:true,cleanupPending:true});}
 
     return json({deleted:true});

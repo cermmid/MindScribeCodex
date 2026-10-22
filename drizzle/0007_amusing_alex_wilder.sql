@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX `jobs_active` ON `processing_jobs` (`owner_id`,`visit_id`,`stage`) WHERE state IN ('queued','preparing','submitting','running','polling','uncertain');

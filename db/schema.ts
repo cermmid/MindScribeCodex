@@ -1,4 +1,5 @@
-import { sqliteTable, text, integer, index } from 'drizzle-orm/sqlite-core';
+import {sql} from 'drizzle-orm';
+import { sqliteTable, text, integer, index, uniqueIndex } from 'drizzle-orm/sqlite-core';
 // Operational counts are separate from owner-scoped visit records.
 export const usageBuckets = sqliteTable('usage_buckets', {
   bucket: text('bucket').primaryKey(),
@@ -35,3 +36,16 @@ export const visitAudio=sqliteTable('visit_audio',{
  objectKey:text('object_key').notNull(),mime:text('mime').notNull(),bytes:integer('bytes').notNull(),durationMs:integer('duration_ms'),
  digest:text('digest').notNull(),createdAt:integer('created_at').notNull(),
 },t=>[index('visit_audio_owner_visit').on(t.ownerId,t.visitId)]);
+
+export const processingJobs=sqliteTable('processing_jobs',{
+ id:text('id').primaryKey(),ownerId:text('owner_id').notNull(),visitId:text('visit_id').notNull(),eventId:text('event_id').notNull(),
+ stage:text('stage').notNull(),state:text('state').notNull(),audioId:text('audio_id'),input:text('input'),inputHash:text('input_hash').notNull(),model:text('model').notNull(),
+ providerId:text('provider_id'),result:text('result'),error:text('error'),createdAt:integer('created_at').notNull(),updatedAt:integer('updated_at').notNull(),leaseUntil:integer('lease_until').notNull().default(0),
+ diagnostics:text('diagnostics').notNull(),
+},t=>[index('jobs_owner_visit').on(t.ownerId,t.visitId),uniqueIndex('jobs_active').on(t.ownerId,t.visitId,t.stage).where(sql`state IN ('queued','preparing','submitting','running','polling','uncertain')`)]);
+export const processingSteps=sqliteTable('processing_steps',{
+ id:text('id').primaryKey(),jobId:text('job_id').notNull(),at:integer('at').notNull(),phase:text('phase').notNull(),details:text('details').notNull(),
+},t=>[index('steps_job').on(t.jobId,t.at)]);
+export const clientReports=sqliteTable('client_reports',{
+ id:text('id').primaryKey(),ownerId:text('owner_id').notNull(),email:text('email').notNull(),visitId:text('visit_id'),jobId:text('job_id'),receivedAt:integer('received_at').notNull(),details:text('details').notNull(),
+},t=>[index('reports_owner_visit').on(t.ownerId,t.visitId,t.receivedAt)]);
