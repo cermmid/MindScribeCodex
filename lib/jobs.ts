@@ -12,7 +12,7 @@ export async function getJob(db:D1Database,owner:string,id:string){
 }
 export const jobView=(j:any)=>({id:j.id,visitId:j.visit_id,stage:j.stage,state:j.state,updatedAt:j.updated_at,error:j.error,...(j.state==='succeeded'?{result:j.stage==='transcribe'?{transcript:j.result}:{note:j.result}}:{})});
 export async function checkpoint(env:JobEnv,j:any,phase:string,details:Record<string,any>={}){
- const now=Date.now(),d={...JSON.parse(j.diagnostics),...details,diagnosticSchema:3,appVersion:'18-background-1',jobId:j.id,diagnosticId:j.id.slice(0,8),pipelinePhase:phase,lastCheckpointAt:now};
+ const now=Date.now(),d={...JSON.parse(j.diagnostics),...details,diagnosticSchema:3,appVersion:'19-recovery-1',jobId:j.id,diagnosticId:j.id.slice(0,8),pipelinePhase:phase,lastCheckpointAt:now};
  j.diagnostics=JSON.stringify(d);
  await env.DB.batch([
   env.DB.prepare('INSERT INTO processing_steps(id,job_id,at,phase,details) VALUES(?,?,?,?,?)').bind(crypto.randomUUID(),j.id,now,phase,JSON.stringify(details)),
@@ -27,7 +27,7 @@ export async function createJob(env:JobEnv,user:User,data:any){
  if(stage==='transcribe'){audio=await audioRecord(env.DB,user.userId,data.audioId);if(audio.visit_id!==visit)throw new AppError('Nagranie należy do innej wizyty.',409);}
  else{input=data.transcript;if(typeof input!=='string'||!input.trim()||input.length>200000)throw new AppError('Nieprawidłowa transkrypcja.',422);}
  const hash=await promptHash(stage==='transcribe'?audio.id:input),now=Date.now(),model=stage==='transcribe'?(env.TRANSCRIPTION_MODEL||'gemini-3.8-flash'):(env.NOTE_MODEL||'gemini-3.8-flash');
- const d=JSON.stringify({diagnosticSchema:3,appVersion:'18-background-1',jobId:id,diagnosticId:id.slice(0,8),pipelinePhase:'queued',aiPhase:'not_started',automaticRetries:0});
+ const d=JSON.stringify({diagnosticSchema:3,appVersion:'19-recovery-1',jobId:id,diagnosticId:id.slice(0,8),pipelinePhase:'queued',aiPhase:'not_started',automaticRetries:0});
  await env.DB.batch([
   env.DB.prepare('INSERT OR IGNORE INTO processing_jobs(id,owner_id,visit_id,event_id,stage,state,audio_id,input,input_hash,model,created_at,updated_at,lease_until,diagnostics) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,0,?)').bind(id,user.userId,visit,id,stage,'queued',audio?.id??null,input,hash,model,now,now,d),
   env.DB.prepare("INSERT OR IGNORE INTO test_events(id,user_id,email,display_name,stage,provider,status,started_at,duration_ms,visit_id,run_id,model,audio_bytes,audio_format,diagnostics) SELECT id,owner_id,?,?,stage,'gemini','pending',created_at,?,visit_id,id,model,?,?,diagnostics FROM processing_jobs WHERE id=? AND owner_id=?").bind(user.email,user.displayName,audio?.duration_ms??null,audio?.bytes??null,audio?.mime??null,id,user.userId)
@@ -59,7 +59,7 @@ export async function advanceJob(env:JobEnv,user:User,id:string){
  const submitting=j.state==='queued';
  const claimed=await env.DB.prepare("UPDATE processing_jobs SET state=?,lease_until=? WHERE id=? AND (state='queued' OR (state IN ('running','polling') AND lease_until<?)) RETURNING *").bind(submitting?'preparing':'polling',now+45000,j.id,now).first<any>();
  if(!claimed)return j;j=claimed;
- const d:Record<string,any>={};
+ const d:Record<string,any>={jobId:j.id};
  try{
   let raw:any;
   if(submitting){

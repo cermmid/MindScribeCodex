@@ -38,12 +38,30 @@ export function responseSnapshot(value:any) {
 }
 export async function promptHash(text:string) {return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(text))),x=>x.toString(16).padStart(2,'0')).join('');}
 
+// Classify provider validation messages without retaining their text or clinical input.
+export function providerErrorSnapshot(body:any) {
+ const error=body?.error, message=typeof error?.message==='string'?error.message:'';
+ const rules:[RegExp,string][]=[
+  [/does not support background|background.*not supported/i,'BACKGROUND_NOT_SUPPORTED'],
+  [/unsupported.*mime|mime.*not supported|invalid.*mime/i,'UNSUPPORTED_MIME_TYPE'],
+  [/audio.*(invalid|decode|corrupt)|unable to.*audio/i,'INVALID_AUDIO'],
+  [/thinking[_ ]level/i,'THINKING_CONFIGURATION'],
+  [/max[_ ]output[_ ]tokens/i,'OUTPUT_TOKEN_LIMIT'],
+  [/payload.*(large|limit)|request.*size.*exceed/i,'REQUEST_TOO_LARGE'],
+  [/model.*(not found|not supported|not available)/i,'MODEL_UNAVAILABLE'],
+  [/api.?key.*(invalid|expired)/i,'API_KEY_INVALID'],
+  [/quota|rate limit/i,'QUOTA_EXCEEDED'],
+  [/unknown name|unknown field|unrecognized field/i,'UNKNOWN_REQUEST_FIELD']
+ ];
+ return {code:integer(error?.code),status:enumValue(error?.status,'OK CANCELLED UNKNOWN INVALID_ARGUMENT DEADLINE_EXCEEDED NOT_FOUND ALREADY_EXISTS PERMISSION_DENIED UNAUTHENTICATED RESOURCE_EXHAUSTED FAILED_PRECONDITION ABORTED OUT_OF_RANGE UNIMPLEMENTED INTERNAL UNAVAILABLE DATA_LOSS'.split(' ')),messagePresent:!!message,reason:rules.find(([pattern])=>pattern.test(message))?.[1]||'UNCLASSIFIED_PROVIDER_ERROR'};
+}
+
 export async function call(url: string, init: RequestInit, timeoutMs = 240000, context:Diagnostics = {}) {
   const started = Date.now();
   const diagnosticId = crypto.randomUUID().slice(0,8);
   const provider = new URL(url).hostname === 'api.elevenlabs.io' ? 'ElevenLabs' : 'Gemini';
-  const diagnostic = (outcome:string, upstreamStatus?:number) => console.error(JSON.stringify({event:'ai_request_failed',diagnosticId,provider,outcome,upstreamStatus,elapsedMs:Date.now()-started}));
-  Object.assign(context,{diagnosticSchema:2,appVersion:'17-session-renewal-1',diagnosticId,provider,upstreamStatus:null,aiPhase:'request',request:{...context.request,endpoint:new URL(url).origin+new URL(url).pathname,method:init.method||'GET',timeoutMs,requestBodyBytes:typeof init.body==='string'?Buffer.byteLength(init.body,'utf8'):null},requestStartedAt:new Date(started).toISOString()});
+  const diagnostic = (outcome:string, upstreamStatus?:number) => console.error(JSON.stringify({event:'ai_request_failed',diagnosticId,provider,outcome,upstreamStatus,elapsedMs:Date.now()-started,jobId:context.jobId,providerError:context.providerError}));
+  Object.assign(context,{diagnosticSchema:2,appVersion:'19-recovery-1',diagnosticId,provider,upstreamStatus:null,aiPhase:'request',request:{...context.request,endpoint:new URL(url).origin+new URL(url).pathname,method:init.method||'GET',timeoutMs,requestBodyBytes:typeof init.body==='string'?Buffer.byteLength(init.body,'utf8'):null},requestStartedAt:new Date(started).toISOString()});
   let response: Response;
   try { response = await fetch(url, {...init, signal: AbortSignal.timeout(timeoutMs)}); }
   catch (error) {
@@ -68,12 +86,12 @@ export async function call(url: string, init: RequestInit, timeoutMs = 240000, c
       504:'Dostawca AI przekroczył czas przetwarzania nagrania lub tekstu.',
       524:'Przekroczono czas oczekiwania na odpowiedź w połączeniu z usługą AI (HTTP 524).',
     };
-    diagnostic('http', response.status);
     // Do not log or expose upstream bodies, which may contain source material.
     // Bound error body reads to 32 KiB. Extract only numeric code and known RPC status.
     context.errorBodyState='not_available';
     const reader=response.body?.getReader();
-    if(reader){try{let size=0;const chunks:Uint8Array[]=[];while(true){const {done,value}=await reader.read();if(done)break;size+=value.length;if(size>32768){context.errorBodyState='over_limit';await reader.cancel();break;}chunks.push(value);}if(size<=32768){const bytes=new Uint8Array(size);let offset=0;for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.length;}const body=JSON.parse(new TextDecoder().decode(bytes));context.errorBodyState='json';context.providerError={code:integer(body?.error?.code),status:enumValue(body?.error?.status,'OK CANCELLED UNKNOWN INVALID_ARGUMENT DEADLINE_EXCEEDED NOT_FOUND ALREADY_EXISTS PERMISSION_DENIED UNAUTHENTICATED RESOURCE_EXHAUSTED FAILED_PRECONDITION ABORTED OUT_OF_RANGE UNIMPLEMENTED INTERNAL UNAVAILABLE DATA_LOSS'.split(' ')),messagePresent:typeof body?.error?.message==='string'};}}catch{context.errorBodyState='unreadable_or_non_json';}finally{try{await reader.cancel();}catch{}}}
+    if(reader){try{let size=0;const chunks:Uint8Array[]=[];while(true){const {done,value}=await reader.read();if(done)break;size+=value.length;if(size>32768){context.errorBodyState='over_limit';await reader.cancel();break;}chunks.push(value);}if(size<=32768){const bytes=new Uint8Array(size);let offset=0;for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.length;}const body=JSON.parse(new TextDecoder().decode(bytes));context.errorBodyState='json';context.providerError=providerErrorSnapshot(body);}}catch{context.errorBodyState='unreadable_or_non_json';}finally{try{await reader.cancel();}catch{}}}
+    diagnostic('http', response.status);
     context.aiPhase='http_error';context.upstreamElapsedMs=Date.now()-started;
     throw new AppError(`${provider} — HTTP ${response.status}. ${messages[response.status] || 'Dostawca odrzucił przetwarzanie.'} Materiał pozostał w tej karcie. Kod: ${diagnosticId}.`, 502, {...context,diagnosticId,provider,source:'upstream_http',upstreamStatus:response.status,exceptionType:'UpstreamHttpError',technicalMessage:response.status===524?'Upstream HTTP 524: response timeout':'Upstream returned a non-success HTTP status',providerMessage:messages[response.status]||'Nieznany błąd HTTP; surową treść pominięto dla ochrony danych.',providerMessageKind:'safe_http_description',upstreamElapsedMs:Date.now()-started});
   }

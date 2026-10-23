@@ -22,3 +22,23 @@ test('Body stream interruption is distinguished from bad JSON and preserves rece
 test('Hidden page, offline and unload events share job ID and survive storage',()=>{
  const {t,listeners,shared}=setup(async()=>Response.json({}));t.setContext({visitId:'v',jobId:'j'});listeners.offline();listeners.pagehide();const rows=JSON.parse(shared.get('mindscribe-diagnostics-v18'));assert.deepEqual(rows.map(x=>x.kind),['OFFLINE','PAGE_UNLOAD']);assert.ok(rows.every(x=>x.jobId==='j'));
 });
+
+test('Editing input after a completed job creates a new job instead of a permanent 409',async()=>{
+ const shared=new Map([['mindscribe-jobs-v18',JSON.stringify({'visit:note':'old-job'})]]);let creates=0;
+ const {t}=setup(async(path,options)=>{
+  if(!options.method)return Response.json({job:{id:'old-job',visitId:'visit',state:'succeeded',result:{note:'old'}}});
+  const data=JSON.parse(options.body);
+  if(data.id==='old-job')return Response.json({error:'Different input'},{status:409});
+  creates++;return Response.json({job:{id:data.id,visitId:'visit',state:'succeeded',result:{note:'updated'}}});
+ },shared);
+ assert.equal((await t.run({visitId:'visit',stage:'note',transcript:'new synthetic input'})).note,'updated');assert.equal(creates,1);
+});
+test('Changed input cannot replace a running job or start a duplicate generation',async()=>{
+ const shared=new Map([['mindscribe-jobs-v18',JSON.stringify({'visit:note':'old-job'})]]);let creates=0;
+ const {t}=setup(async(path,options)=>{
+  if(!options.method)return Response.json({job:{id:'old-job',visitId:'visit',state:'running'}});
+  if(JSON.parse(options.body).id!=='old-job')creates++;
+  return Response.json({error:'Different input'},{status:409});
+ },shared);
+ await assert.rejects(t.run({visitId:'visit',stage:'note',transcript:'changed'}),/Different input/);assert.equal(creates,0);
+});

@@ -64,7 +64,14 @@
    job=(await request('/api/jobs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(input)},{visitId:input.visitId,jobId:input.id})).job;
    saved[key]=job.id;write(jobKey,saved);
   }
-  if(job && input.id!==job.id){await request('/api/jobs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...input,id:job.id})},{visitId:input.visitId,jobId:job.id});}
+  if(job && input.id!==job.id){
+   try{await request('/api/jobs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...input,id:job.id})},{visitId:input.visitId,jobId:job.id});}
+   catch(e){
+    // A completed job is reusable only for the same input. Never release an active job.
+    if(e.status!==409||job.state!=='succeeded')throw e;
+    delete saved[key];write(jobKey,saved);return run({...input,id:crypto.randomUUID()},onProgress);
+   }
+  }
   return await wait(job,onProgress);
  }
  function acknowledged(visitId){const saved=read(jobKey,{});for(const key of Object.keys(saved))if(key.startsWith(visitId+':'))delete saved[key];write(jobKey,saved);}

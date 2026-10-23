@@ -65,3 +65,16 @@ test('Copy report includes all stored technical metadata for selected attempt an
  assert.equal(context.reportFor({...event,diagnostics:null},[event]).kompletnoscDiagnostyki.zapisRozszerzony,false);
  assert.equal(context.reportFor({...event,status:'pending'},[event]).kompletnoscDiagnostyki.probaZakonczona,false);
 });
+
+test('HTTP 400 identifies background rejection in durable diagnostics and logs without patient text',async()=>{
+ const {call}=await import('../work/testbuild/ai.js');const logs=[];const old=console.error;console.error=x=>logs.push(JSON.parse(x));
+ try{await withFetch(async()=>Response.json({error:{code:400,status:'INVALID_ARGUMENT',message:'Model does not support background interactions. PRIVATE PATIENT'}},{status:400}),async()=>{
+  const d={jobId:'test-job'};await assert.rejects(call('https://generativelanguage.googleapis.com/v1beta/interactions',{},1000,d));
+  assert.equal(d.providerError.reason,'BACKGROUND_NOT_SUPPORTED');assert.equal(logs[0].providerError.reason,'BACKGROUND_NOT_SUPPORTED');assert.equal(logs[0].jobId,'test-job');assert.ok(!JSON.stringify([d,logs]).includes('PRIVATE PATIENT'));
+ });}finally{console.error=old;}
+});
+test('Unknown provider messages cannot leak arbitrary input through classifications',async()=>{
+ const {providerErrorSnapshot}=await import('../work/testbuild/ai.js');
+ assert.equal(providerErrorSnapshot({error:{message:'PRIVATE PATIENT'}}).reason,'UNCLASSIFIED_PROVIDER_ERROR');
+ assert.ok(!JSON.stringify(providerErrorSnapshot({error:{message:'PRIVATE PATIENT'}})).includes('PRIVATE PATIENT'));
+});
